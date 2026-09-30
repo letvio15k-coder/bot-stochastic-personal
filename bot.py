@@ -4,6 +4,13 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 TOKEN = os.environ.get("TOKEN")
+
+# --- TU DONG XOA WEBHOOK CU DE BOT REP NGAY ---
+try:
+    requests.get(f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
+    print("Da xoa webhook cu")
+except: pass
+
 SUBS_FILE="subs.json"
 subscribers=set()
 try:
@@ -18,7 +25,7 @@ def save_subs():
 
 app_flask=Flask(__name__)
 @app_flask.route('/')
-def home(): return f"STOCHASTIC FINAL FIX - {len(subscribers)} users - OK"
+def home(): return f"BOT STOCHASTIC FINAL - {len(subscribers)} users OK"
 
 def get_klines(symbol, interval, limit=50):
     try:
@@ -26,7 +33,7 @@ def get_klines(symbol, interval, limit=50):
             symbol = symbol.upper() + "USDT"
         url=f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         r=requests.get(url,timeout=10).json()
-        if isinstance(r,dict): return None, symbol
+        if isinstance(r, dict): return None, symbol
         closes=[float(x[4]) for x in r]
         highs=[float(x[2]) for x in r]
         lows=[float(x[3]) for x in r]
@@ -75,7 +82,7 @@ def analyze_stoch(symbol_input, interval):
         signal=f"🟡 QUA BAN <20 K {k:.0f}"
     elif k>80:
         signal=f"🟡 QUA MUA >80 K {k:.0f}"
-    return {"symbol":symbol.replace("USDT",""),"full_symbol":symbol,"interval":interval,"price":data["closes"][-1],"k":k,"d":d,"signal":signal,"k_prev":k_prev,"d_prev":d_prev}
+    return {"symbol":symbol.replace("USDT",""),"price":data["closes"][-1],"k":k,"d":d,"signal":signal}
 
 def get_top_coins(limit=40):
     try:
@@ -85,20 +92,29 @@ def get_top_coins(limit=40):
         s=sorted(usdt,key=lambda x: float(x["quoteVolume"]),reverse=True)
         return [x["symbol"] for x in s[:limit]]
     except:
-        return ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT"]
+        return ["BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT"]
 
 async def start_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
-    await u.message.reply_text("📈 BOT STOCHASTIC FINAL FIX\n\n/stoch BTC - Check coin bat ky\n/stoch SOL 1h\n/scan - Quet top 40 coin hot 4h\n/scan_oversold - Coin qua ban <20\n/scan_overbought - Coin qua mua >80\n/auto_on - Bat bao tu dong\n/auto_off - Tat")
+    await u.message.reply_text(
+        "📈 BOT STOCHASTIC @boadaststochastii_bot - FINAL\n\n"
+        "/stoch BTC - Check coin bat ky\n"
+        "/stoch PEPE 15m - Check khung 15m\n"
+        "/scan - Quet 40 coin hot 4h\n"
+        "/scan_oversold - Coin qua ban <20\n"
+        "/scan_overbought - Coin qua mua >80\n"
+        "/auto_on - Bat bao tu dong\n"
+        "/auto_off - Tat bao"
+    )
 
 async def stoch_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     if not c.args:
-        await u.message.reply_text("Go: /stoch BTC hoac /stoch PEPE 15m"); return
+        await u.message.reply_text("Go: /stoch BTC"); return
     symbol=c.args[0]; interval=c.args[1] if len(c.args)>1 else "4h"
     await u.message.reply_text(f"⏳ Check {symbol.upper()} {interval}...")
     r=await asyncio.to_thread(analyze_stoch,symbol,interval)
     if not r:
         await u.message.reply_text(f"Khong tim thay {symbol}"); return
-    await u.message.reply_text(f"📊 STOCH {r['symbol']} {interval.upper()} ${r['price']:.4f}\nK: {r['k']:.1f} D: {r['d']:.1f}\n{r['signal'] or 'Trung tinh'}")
+    await u.message.reply_text(f"📊 {r['symbol']} {interval.upper()} ${r['price']:.4f}\nK: {r['k']:.1f} D: {r['d']:.1f}\n{r['signal'] or 'Trung tinh'}")
 
 async def scan_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     interval=c.args[0] if c.args and c.args[0] in ["1h","4h","1d","15m"] else "4h"
@@ -107,14 +123,9 @@ async def scan_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     found=[]
     for sym in top:
         r=await asyncio.to_thread(analyze_stoch,sym,interval)
-        if r and r["signal"] and ("MUA MANH" in r["signal"] or "BAN MANH" in r["signal"]):
+        if r and r["signal"]:
             found.append(f"{r['signal']} {r['symbol']} ${r['price']:.3f}")
-    if not found:
-        for sym in top:
-            r=await asyncio.to_thread(analyze_stoch,sym,interval)
-            if r and r["signal"]:
-                found.append(f"{r['signal']} {r['symbol']}")
-    await u.message.reply_text(f"🔥 STOCH {interval}:\n"+"\n".join(found[:20]) if found else f"Khong co signal hot {interval}")
+    await u.message.reply_text(f"🔥 STOCH {interval}:\n"+"\n".join(found[:20]) if found else f"Khong co signal {interval}")
 
 async def scan_oversold_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     await u.message.reply_text("⏳ Tim coin QUA BAN <20...")
@@ -123,8 +134,8 @@ async def scan_oversold_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     for sym in top:
         r=await asyncio.to_thread(analyze_stoch,sym,"4h")
         if r and r["k"]<20:
-            found.append(f"🟢 QUA BAN {r['symbol']} K {r['k']:.0f} D {r['d']:.0f} ${r['price']:.4f}")
-    await u.message.reply_text("\n".join(found[:20]) if found else "Khong co coin qua ban")
+            found.append(f"🟢 BAN {r['symbol']} K {r['k']:.0f} ${r['price']:.4f}")
+    await u.message.reply_text("\n".join(found[:20]) if found else "Khong co")
 
 async def scan_overbought_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     await u.message.reply_text("⏳ Tim coin QUA MUA >80...")
@@ -133,8 +144,8 @@ async def scan_overbought_cmd(u:Update,c:ContextTypes.DEFAULT_TYPE):
     for sym in top:
         r=await asyncio.to_thread(analyze_stoch,sym,"4h")
         if r and r["k"]>80:
-            found.append(f"🔴 QUA MUA {r['symbol']} K {r['k']:.0f} ${r['price']:.4f}")
-    await u.message.reply_text("\n".join(found[:20]) if found else "Khong co coin qua mua")
+            found.append(f"🔴 MUA {r['symbol']} K {r['k']:.0f} ${r['price']:.4f}")
+    await u.message.reply_text("\n".join(found[:20]) if found else "Khong co")
 
 async def check_job(context: ContextTypes.DEFAULT_TYPE):
     if not subscribers: return
@@ -144,7 +155,7 @@ async def check_job(context: ContextTypes.DEFAULT_TYPE):
             r=await asyncio.to_thread(analyze_stoch,sym,"4h")
             if not r or not r["signal"]: continue
             if "MUA MANH" in r["signal"] or "BAN MANH" in r["signal"]:
-                msg=f"{'🟢🟢' if 'MUA' in r['signal'] else '🔴🔴'} {r['signal']}\n{r['symbol']} 4h K {r['k']:.0f} D {r['d']:.0f} Gia ${r['price']:.4f}"
+                msg=f"{'🟢🟢' if 'MUA' in r['signal'] else '🔴🔴'} {r['signal']}\n{r['symbol']} 4h K {r['k']:.0f} D {r['d']:.0f} ${r['price']:.4f}"
                 for cid in list(subscribers):
                     try: await context.bot.send_message(chat_id=cid,text=msg)
                     except: pass
@@ -152,9 +163,7 @@ async def check_job(context: ContextTypes.DEFAULT_TYPE):
 
 async def auto_on(u:Update,c:ContextTypes.DEFAULT_TYPE):
     subscribers.add(u.effective_chat.id); save_subs()
-    if not c.job_queue.get_jobs_by_name("stoch_job"):
-        c.job_queue.run_repeating(check_job,interval=1800,first=10,name="stoch_job")
-    await u.message.reply_text("✅ DA BAT AUTO STOCHASTIC - 30p check 1 lan")
+    await u.message.reply_text("✅ DA BAT AUTO - 30p check 1 lan top 30 coin")
 
 async def auto_off(u:Update,c:ContextTypes.DEFAULT_TYPE):
     subscribers.discard(u.effective_chat.id); save_subs()
@@ -173,5 +182,5 @@ if __name__=='__main__':
     app.add_handler(CommandHandler("auto_on",auto_on))
     app.add_handler(CommandHandler("auto_off",auto_off))
     app.job_queue.run_repeating(check_job,interval=1800,first=20,name="stoch_job")
-    print("STOCHASTIC FINAL FIX RUNNING")
-    app.run_polling()
+    print("STOCHASTIC FINAL RUNNING")
+    app.run_polling(drop_pending_updates=True)
